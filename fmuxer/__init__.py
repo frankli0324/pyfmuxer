@@ -18,6 +18,16 @@ class ForwardMuxer:
             on_timeout: callable = None,
             on_error: callable = lambda e: traceback.print_exc(),
     ):
+        """
+        Adds a new protocol matching rule to the list of rules.
+
+        :parameter required_bytes: bytes required for protocol identification
+        :parameter get_socket: returns socket connection if matched the rule, None if not
+        :param on_connection: callback for per_proxy actions, useful for content inspection
+        :param on_timeout: fallback action when timeout occurs. if not defined, `on_error` is used.
+        :param on_error: rules can define their fallback action when error occurs on receiving
+            the first few bytes (e.g. timeout). defaults to lambda: None
+        """
         self.rules.append({
             "required_bytes": required_bytes,
             "get_socket": get_socket,

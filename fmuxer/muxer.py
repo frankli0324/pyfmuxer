@@ -9,20 +9,6 @@ def Muxer(rules):
         original_timeout = sock.gettimeout()
         sock.settimeout(5)  # TODO: be configurable?
         # logger.debug(buf)
-        # {
-        #     # bytes required for protocol identification
-        #     "required_bytes": int,
-        #     # returns socket connection if matched the rule, None if not
-        #     "get_socket": callable,
-        #     # callback for per_proxy actions, useful for content inspection
-        #     "on_connection": callable,
-        #     # fallback action when timeout occurs. if not defined on_error is used.
-        #     # defaults to lambda: None
-        #     "on_timeout": callable,
-        #     # rules can define their fallback action when error occurs on receiving the first few bytes (e.g. timeout)
-        #     # defaults to lambda: None
-        #     "on_error": callable,
-        # }
         # 改进思路：按照required bytes排序，放到优先队列里，如果有人要require more bytes，则放回优先队列
         for rule in rules:
             try:
