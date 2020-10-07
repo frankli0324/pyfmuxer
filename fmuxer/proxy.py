@@ -1,4 +1,5 @@
 import socket
+import time
 from select import select
 from .utils import hexdump
 
@@ -31,3 +32,4 @@ class Proxy:
                 self.proxy_send(self.upstream, self.client)
             if self.client in ready_read and self.upstream in ready_write:
                 self.proxy_send(self.client, self.upstream)
+            time.sleep(0.001)

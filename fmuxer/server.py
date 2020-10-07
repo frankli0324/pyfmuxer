@@ -1,7 +1,6 @@
-from socketserver import ThreadingMixIn, TCPServer
+from socketserver import ThreadingTCPServer
 
-
-class ThreadedTCPMuxerServer(ThreadingMixIn, TCPServer):
+class ThreadedTCPMuxerServer(ThreadingTCPServer):
     allow_reuse_address = True
     request_queue_size = 1
 
