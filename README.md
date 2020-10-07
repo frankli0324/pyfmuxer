@@ -26,16 +26,16 @@ from fmuxer import ForwardMuxer
 server = ForwardMuxer('0.0.0.0', 1234)
 
 
-def SSHHandler(b, more):
-    if b.startswith(b'SSH'):
+def SSHHandler(banner):
+    if banner.startswith(b'SSH'):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.connect(('localhost', 22))
         return sock
 
 
-def HTTPHandler(b, more):
+def HTTPHandler(banner):
     for method in [b'GET', b'POST', b'PATCH', b'PUT', b'OPTIONS', b'HEAD']:
-        if b.startswith(method):
+        if banner.startswith(method):
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.connect(('localhost', 81))
             return sock

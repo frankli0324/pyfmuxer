@@ -1,7 +1,8 @@
-from .handler import Handler
-from .muxer import Muxer
-from .server import ThreadedTCPMuxerServer
 import traceback
+
+from .handler import Handler
+from .muxer import Muxer, RequireMoreBytes
+from .server import ThreadedTCPMuxerServer
 
 
 class ForwardMuxer:
@@ -43,4 +44,4 @@ class ForwardMuxer:
         ).serve_forever()
 
 
-__all__ = ['ForwardMuxer']
+__all__ = ['ForwardMuxer', 'RequireMoreBytes']
