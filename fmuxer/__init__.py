@@ -83,20 +83,21 @@ class Handler(BaseRequestHandler):
             return
         upstream.sendall(buf)
         sock.settimeout(original_timeout)
-        return upstream
+        return rule, upstream
 
     def handle(self):
         peer = f'{self.client_address[0]}:{self.client_address[1]}'
         try:
-            upstream = self.muxer(self.request)
-            if not upstream:
-                logger.warning('no matches found')
+            context = self.muxer(self.request)
+            if not context:
+                logger.warning(f'<{peer}> no matches found')
                 raise EOFError()
-            logger.info(f'{peer} connected')
+            rule, upstream = context
+            logger.info(f'[{rule["get_socket"].__name__}] <{peer}> connected')
             proxy = Proxy(upstream, self.request)
             proxy.serve_until_dead()
         except EOFError:
-            logger.info(f'{peer} disconnected')
+            logger.info(f'[{rule["get_socket"].__name__}] <{peer}> disconnected')
 
     def finish(self):
         try:
@@ -120,9 +121,7 @@ class ForwardMuxer(ThreadingTCPServer):
         pass
 
     def handle_error(self, request, client_address):
-        import sys
-        logger.error(sys.exc_info())
-        logger.error(client_address)
+        traceback.print_exc()
 
     def register_handler(
             self,

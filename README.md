@@ -45,3 +45,8 @@ server.register_handler(3, SSHHandler)
 server.register_handler(7, HTTPHandler)
 server.start()
 ```
+
+## Disclaimer
+
+This script is considered a temporary tool for short term use.  
+It's NOT production ready.
