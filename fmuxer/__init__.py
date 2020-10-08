@@ -2,16 +2,50 @@ import queue
 import socket
 import time
 import traceback
-import typing
+from logging import getLogger
 from select import select
 from socketserver import BaseRequestHandler, ThreadingTCPServer
+from typing import *
 
-from .log import logger
+logger = getLogger('tmuxer')
 
 
-class ComparableRule(dict):
+class Rule:
+    # bytes required for protocol identification
+    required_bytes = 0
+    # target to forward connection to, passed to socket.connect
+    target = ()
+
+    @property
+    def name(self):
+        return self.__class__.__name__
+
+    # returns whether the protocol banner matched
+    def match(self, banner) -> bool:
+        return False
+
+    def get_socket(self) -> socket.socket:
+        print(self.target)
+        try:
+            assert isinstance(self.target, tuple)
+            assert isinstance(self.target[0], str)
+            assert isinstance(self.target[1], int)
+        except AssertionError:
+            logger.error('target must be a tuple ("host to connect to", port)')
+            raise
+        upstream = socket.socket()
+        upstream.connect(self.target)
+        return upstream
+
+    # callback for per_forward actions, useful for content inspection
+    def on_send(self, peer_from, peer_to, buffer) -> None:
+        pass
+
+    def on_error(self, err):
+        traceback.print_exc()
+
     def __lt__(self, other):
-        return self['required_bytes'] < other['required_bytes']
+        return self.required_bytes < other.required_bytes
 
 
 class RequireMoreBytes(Exception):
@@ -21,16 +55,16 @@ class RequireMoreBytes(Exception):
 
 
 class Proxy:
-    def __init__(self, upstream: socket.socket, client: socket.socket):
+    def __init__(self, upstream: socket.socket, client: socket.socket, on_send: callable):
         self.upstream = upstream
         self.client = client
+        self.on_send = on_send
 
-    @staticmethod
-    def proxy_send(sock_from, sock_to):
+    def proxy_send(self, sock_from, sock_to):
         buffer = sock_from.recv(1024)
-        # hexdump(buffer)
         if not buffer:
             raise EOFError()
+        self.on_send(sock_from.getpeername(), sock_to.getpeername(), buffer)
         while buffer:
             buffer = buffer[sock_to.send(buffer):]
 
@@ -39,7 +73,7 @@ class Proxy:
             ready_read, ready_write, ready_exceptional = select(
                 [self.upstream, self.client],
                 [self.upstream, self.client],
-                [], 1
+                []
             )
             if ready_exceptional:
                 logger.debug(ready_exceptional)
@@ -52,10 +86,10 @@ class Proxy:
 
 
 class Handler(BaseRequestHandler):
-    def muxer(self, sock) -> typing.Optional[socket.socket]:
+    def muxer(self, sock) -> Optional[Tuple[Any, Optional[Any]]]:
         q = queue.PriorityQueue()
         for rule in self.server.rules:
-            q.put(ComparableRule(rule))
+            q.put(rule)
         received_bytes = 0
         buf = b''
         upstream = None
@@ -64,17 +98,18 @@ class Handler(BaseRequestHandler):
         while not q.empty():
             rule = q.get()
             try:
-                if rule['required_bytes'] > received_bytes:
-                    buf += sock.recv(rule['required_bytes'] - received_bytes)
+                if rule.required_bytes > received_bytes:
+                    buf += sock.recv(rule.required_bytes - received_bytes)
                     received_bytes = len(buf)
-                upstream = rule['get_socket'](buf)
+                if rule.match(buf):
+                    upstream = rule.get_socket()
             except RequireMoreBytes as e:
-                rule['required_bytes'] = e.bytes + received_bytes
+                rule.required_bytes = e.bytes + received_bytes
                 q.put(rule)
             except Exception as e:
-                if e is socket.timeout and rule['on_timeout']:
-                    rule['on_timeout'](e)
-                upstream = rule['on_error'](e)
+                if e is socket.timeout and rule.on_timeout:
+                    rule.on_timeout(e)
+                upstream = rule.on_error(e)
             finally:
                 if upstream:
                     break
@@ -86,6 +121,7 @@ class Handler(BaseRequestHandler):
         return rule, upstream
 
     def handle(self):
+        rule = None
         peer = f'{self.client_address[0]}:{self.client_address[1]}'
         try:
             context = self.muxer(self.request)
@@ -93,11 +129,12 @@ class Handler(BaseRequestHandler):
                 logger.warning(f'<{peer}> no matches found')
                 raise EOFError()
             rule, upstream = context
-            logger.info(f'[{rule["get_socket"].__name__}] <{peer}> connected')
-            proxy = Proxy(upstream, self.request)
+            logger.info(f'[{rule.name}] <{peer}> connected')
+            proxy = Proxy(upstream, self.request, rule.on_send)
             proxy.serve_until_dead()
         except EOFError:
-            logger.info(f'[{rule["get_socket"].__name__}] <{peer}> disconnected')
+            logger.info(
+                f'[{rule.name if rule else "no match"}] <{peer}> disconnected')
 
     def finish(self):
         try:
@@ -123,35 +160,12 @@ class ForwardMuxer(ThreadingTCPServer):
     def handle_error(self, request, client_address):
         traceback.print_exc()
 
-    def register_handler(
-            self,
-            required_bytes: int,
-            get_socket: callable,
-            on_connection: callable = lambda c: None,
-            on_timeout: callable = None,
-            on_error: callable = lambda e: traceback.print_exc(),
-    ):
-        """
-        Adds a new protocol matching rule to the list of rules.
-
-        :parameter required_bytes: bytes required for protocol identification
-        :parameter get_socket: returns socket connection if matched the rule, None if not
-        :param on_connection: callback for per_proxy actions, useful for content inspection
-        :param on_timeout: fallback action when timeout occurs. if not defined, `on_error` is used.
-        :param on_error: rules can define their fallback action when error occurs on receiving
-            the first few bytes (e.g. timeout). defaults to lambda: None
-        """
-        self.rules.append({
-            "required_bytes": required_bytes,
-            "get_socket": get_socket,
-            "on_connection": on_connection,
-            "on_timeout": on_timeout or on_error,
-            "on_error": on_error,
-        })
-        pass
+    def register_rule(self, rule):
+        assert isinstance(rule, Rule)
+        self.rules.append(rule)
 
     def start(self):
         self.serve_forever()
 
 
-__all__ = ['ForwardMuxer', 'RequireMoreBytes']
+__all__ = ['ForwardMuxer', 'RequireMoreBytes', 'Rule']

@@ -1,6 +1,3 @@
-from .log import logger
-
-
 def hexdump(data, length=16):
     filter = ''.join([
         (len(repr(chr(x))) == 3) and chr(x)
@@ -16,4 +13,4 @@ def hexdump(data, length=16):
             for x in chars
         ])
         lines.append("%04x  %-*s  %s\n" % (c, length * 3, hex, printable))
-    logger.debug(''.join(lines))
+    return ''.join(lines)
