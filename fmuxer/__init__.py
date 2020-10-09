@@ -3,7 +3,7 @@ import socket
 import time
 import traceback
 from logging import getLogger
-from select import select
+from selectors import DefaultSelector, EVENT_READ
 from socketserver import BaseRequestHandler, ThreadingTCPServer
 from typing import *
 
@@ -59,6 +59,9 @@ class Proxy:
         self.upstream = upstream
         self.client = client
         self.on_send = on_send
+        self.selector = DefaultSelector()
+        self.selector.register(self.upstream, EVENT_READ, self.client)
+        self.selector.register(self.client, EVENT_READ, self.upstream)
 
     def proxy_send(self, sock_from, sock_to):
         buffer = sock_from.recv(1024)
@@ -70,18 +73,8 @@ class Proxy:
 
     def serve_until_dead(self):
         while True:
-            ready_read, ready_write, ready_exceptional = select(
-                [self.upstream, self.client],
-                [self.upstream, self.client],
-                []
-            )
-            if ready_exceptional:
-                logger.debug(ready_exceptional)
-                # what does it mean?
-            if self.upstream in ready_read and self.client in ready_write:
-                self.proxy_send(self.upstream, self.client)
-            if self.client in ready_read and self.upstream in ready_write:
-                self.proxy_send(self.client, self.upstream)
+            for conn, mask in self.selector.select():
+                self.proxy_send(conn.fileobj, conn.data)
             time.sleep(0.001)
 
 
