@@ -32,39 +32,46 @@ class MCHandler(Rule):
     required_bytes = 5
     target = ('localhost', 25565)
 
-    @staticmethod
-    def read_varint(banner):
+    offset = 0
+    banner = b''
+
+    def read_varint(self):
         number = 0
         pos = 0
-        for i in range(0, 5):
-            number |= (int(banner[i]) & 0x7F) << 7 * i
-            if not int(banner[i]) & 0x80:
+        for i in range(self.offset, self.offset + 5):
+            number |= (int(self.banner[i]) & 0x7F) << 7 * (i - self.offset)
+            if not int(self.banner[i]) & 0x80:
                 pos = i + 1
                 break
         if number & (1 << 31):
             number -= 1 << 32
         if not ((-1 << 31) <= number < (+1 << 31)):
             return 0, None
-        return pos, number
+        self.offset = pos
+        return number
 
     def match(self, banner):
         try:
-            off, packet_length = self.read_varint(banner)
+            self.offset = 0
+            self.banner = banner
+            packet_length = self.read_varint()
 
             if not packet_length:
                 return False
-            if len(banner) - 2 < packet_length:
-                raise RequireMoreBytes(packet_length - len(banner) + 2)
+            if len(banner) - self.offset - 1 < packet_length:
+                raise RequireMoreBytes(
+                    packet_length - len(banner) + self.offset + 1)
 
-            off, packet_id = self.read_varint(banner[off:])
-            off, version = self.read_varint(banner[off:])
-            off, addr_len = self.read_varint(banner[off:])
+            packet_id = self.read_varint()
+            version = self.read_varint()
+            addr_len = self.read_varint()
 
-            if addr_len + off > packet_length:
+            if addr_len + self.offset > packet_length:
                 return False
-            off += addr_len
-            port = int.from_bytes(banner[off:off + 2], 'big')
-            off, next_state = self.read_varint(banner[off + 2:])
+            self.offset += addr_len + 2
+            port = int.from_bytes(banner[self.offset - 2:self.offset], 'big')
+
+            next_state = self.read_varint()
             if next_state != 1 and next_state != 2:
                 return False
         except IndexError:
