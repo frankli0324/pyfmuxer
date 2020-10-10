@@ -18,33 +18,7 @@ under most circumstances, you only have to import the ForwardMuxer class and ins
 
 ## Example
 
-```python
-import socket
-
-from fmuxer import ForwardMuxer
-
-server = ForwardMuxer('0.0.0.0', 1234)
-
-
-def SSHHandler(banner):
-    if banner.startswith(b'SSH'):
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.connect(('localhost', 22))
-        return sock
-
-
-def HTTPHandler(banner):
-    for method in [b'GET', b'POST', b'PATCH', b'PUT', b'OPTIONS', b'HEAD']:
-        if banner.startswith(method):
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.connect(('localhost', 81))
-            return sock
-
-
-server.register_handler(3, SSHHandler)
-server.register_handler(7, HTTPHandler)
-server.start()
-```
+go check out the snippets in the `examples` directory.
 
 ## Disclaimer
 

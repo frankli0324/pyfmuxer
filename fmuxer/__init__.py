@@ -25,7 +25,6 @@ class Rule:
         return False
 
     def get_socket(self) -> socket.socket:
-        print(self.target)
         try:
             assert isinstance(self.target, tuple)
             assert isinstance(self.target[0], str)
@@ -79,13 +78,15 @@ class Proxy:
 
 
 class Handler(BaseRequestHandler):
-    def muxer(self, sock) -> Optional[Tuple[Any, Optional[Any]]]:
+    def muxer(self, sock) -> Optional[Tuple[Rule, socket.socket]]:
         q = queue.PriorityQueue()
         for rule in self.server.rules:
             q.put(rule)
         received_bytes = 0
         buf = b''
         upstream = None
+        rule = None
+
         original_timeout = sock.gettimeout()
         sock.settimeout(5)  # TODO: be configurable?
         while not q.empty():
