@@ -95,7 +95,9 @@ class ForwardMuxerAsyncio:
             rule = q.get()
             try:
                 if rule.required_bytes > received_bytes:
-                    buf += await lreader.read(rule.required_bytes - received_bytes)
+                    buf += await asyncio.wait_for(lreader.read(
+                        rule.required_bytes - received_bytes
+                    ), timeout=5)
                     received_bytes = len(buf)
                 if rule.match(buf):
                     upstream = await rule.get_socket()
@@ -116,22 +118,20 @@ class ForwardMuxerAsyncio:
         return rule, upstream
 
     async def handle(self, lreader, lwriter):
-        rule = None
-        rwriter = None
         peer = lwriter.get_extra_info('peername')
         peer = f'{peer[0]}:{peer[1]}'
         try:
             context = await self.muxer(lreader)
             if not context:
                 logger.warning(f'<{peer}> no matches found')
-                raise EOFError()
+                logger.info(f'[no match] <{peer}> disconnected')
+                return
             rule, (rreader, rwriter) = context
             logger.info(f'[{rule.name}] <{peer}> connected')
             proxy = Proxy(lreader, lwriter, rreader, rwriter, rule.on_send)
             await proxy.serve_until_dead()
         except EOFError:
-            logger.info(
-                f'[{rule.name if rule else "no match"}] <{peer}> disconnected')
+            logger.info(f'[{rule.name}] <{peer}> disconnected')
 
     async def get_server(self):
         return await asyncio.start_server(self.handle, *self.bind_addr)
